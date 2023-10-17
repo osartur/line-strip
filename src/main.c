@@ -1,10 +1,15 @@
 #include <SDL2/SDL.h>
 #define GL_GLEXT_PROTOTYPES
 #include <SDL2/SDL_opengles2.h>
+#include <stdlib.h>
 #include "glsl.h"
 
 int main(int argc, char *argv[])
 {
+	int total_vertexes = 10;
+	if (argc == 2)
+		total_vertexes = atoi(argv[1]);
+	
 	SDL_Init(SDL_INIT_EVERYTHING);
 
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
@@ -19,8 +24,8 @@ int main(int argc, char *argv[])
 	
 	SDL_GLContext context = SDL_GL_CreateContext(window);
 
-	SDL_GL_SetSwapInterval(0);    // no vsync
-	glViewport(0, 0, 1920, 1080); // set view area
+	SDL_GL_SetSwapInterval(0);
+	glViewport(0, 0, 1920, 1080);
 
 	GLuint vshader = glCreateShader(GL_VERTEX_SHADER);
 	GLuint fshader = glCreateShader(GL_FRAGMENT_SHADER);
@@ -28,9 +33,6 @@ int main(int argc, char *argv[])
 
 	glAttachShader(program, vshader);
 	glAttachShader(program, fshader);
-	// Note that a shader can be attached at any point - it does not 
-	// necessarily need to be compiled or even have source code before 
-	// being attached to a program.
 
 	if (!compile_shader("shader/default_vert.glsl", vshader))
 	{
@@ -45,14 +47,8 @@ int main(int argc, char *argv[])
 	}
 
 	glLinkProgram(program);
-	glUseProgram(program);  // use this shader in the pipeline
+	glUseProgram(program);
 	
-	GLfloat triangle[] = {
-		-0.5f, -0.5f,  // left
-		0.0f, 0.5f,    // top
-		0.5f, -0.5f    // right
-	};
-
 	GLuint vao;
 	glGenVertexArraysOES(1, &vao);
 	glBindVertexArrayOES(vao);
@@ -60,26 +56,46 @@ int main(int argc, char *argv[])
 	GLuint vbo;
 	glGenBuffers(1, &vbo);
 	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(triangle), triangle, GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, total_vertexes * 2 * sizeof(GLfloat), NULL, GL_DYNAMIC_DRAW);
 
 	glEnableVertexAttribArray(0);
-	// describe the layout of vertices
 	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, (void*) 0);
+
+	GLfloat v[2];
+	int i = 0;
+	int size = 0;
 
 	while (!SDL_QuitRequested())
 	{
+		SDL_Event ev;
+		while (SDL_PollEvent(&ev))
+		{
+			if (ev.type == SDL_FINGERDOWN)
+			{
+				v[0] = (ev.tfinger.x - 0.5f) / 0.5f;
+				v[1] = (0.5f - ev.tfinger.y) / 0.5f;
+				glBufferSubData(GL_ARRAY_BUFFER, i * 2 * sizeof(GLfloat), 2 * sizeof(GLfloat), v);
+
+				i = (i + 1) % total_vertexes;
+				if (size < total_vertexes)
+					size++;
+			}
+		}
+
 		glClearColor(0.0, 0.0, 0.0, 1.0);
 		glClear(GL_COLOR_BUFFER_BIT);
 
-		glDrawArrays(GL_TRIANGLES, 0, 3);
+		glDrawArrays(GL_LINE_STRIP, 0, size);
 
 		SDL_GL_SwapWindow(window);
 	}
 
-	// free resources
 	glDeleteProgram(program);
 	glDeleteShader(vshader);
 	glDeleteShader(fshader);
+
+	glDeleteVertexArraysOES(1, &vao);
+	glDeleteBuffers(1, &vbo);
 
 	SDL_DestroyWindow(window);
 	SDL_GL_DeleteContext(context);
